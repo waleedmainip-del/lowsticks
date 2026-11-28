@@ -1,0 +1,89 @@
+name: Make clips
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Video / VOD link (YouTube, Twitch, Kick, X) or a direct .mp4 link"
+        required: true
+      count:
+        description: "How many clips"
+        default: "3"
+      min_seconds:
+        description: "Shortest clip (seconds)"
+        default: "20"
+      max_seconds:
+        description: "Longest clip (seconds)"
+        default: "55"
+      section:
+        description: "Only this part of a long VOD, e.g. 1:00:00-1:45:00 (blank = whole video)"
+        default: ""
+      layout:
+        description: "blur = whole frame + blurred background, crop = fill the screen"
+        type: choice
+        options: [blur, crop]
+        default: blur
+      language:
+        description: "Spoken language (en, ar, fr, ur ... blank = auto)"
+        default: "en"
+      model:
+        description: "Speech model (small is more accurate, slower)"
+        type: choice
+        options: [base, small, tiny]
+        default: base
+      title_overlay:
+        description: "Show the hook text at the top for the first 3.5s"
+        type: boolean
+        default: false
+
+jobs:
+  clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: clipper/requirements.txt
+
+      - name: Install ffmpeg and tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q -r clipper/requirements.txt
+          mkdir -p clipper/fonts
+          curl -fsSL -o clipper/fonts/Poppins-ExtraBold.ttf https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-ExtraBold.ttf || echo "font download failed, using default font"
+
+      - name: Cookies (only if you added a YT_COOKIES secret)
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: |
+          if [ -n "$YT_COOKIES" ]; then printf '%s\n' "$YT_COOKIES" > cookies.txt; echo "COOKIE_ARG=--cookies cookies.txt" >> "$GITHUB_ENV"; fi
+
+      - name: Make the clips
+        env:
+          URL: ${{ inputs.url }}
+          COUNT: ${{ inputs.count }}
+          MIN_S: ${{ inputs.min_seconds }}
+          MAX_S: ${{ inputs.max_seconds }}
+          SECTION: ${{ inputs.section }}
+          LAYOUT: ${{ inputs.layout }}
+          LANG_CODE: ${{ inputs.language }}
+          MODEL: ${{ inputs.model }}
+          TITLE_OVERLAY: ${{ inputs.title_overlay }}
+        run: |
+          args=(--count "$COUNT" --min "$MIN_S" --max "$MAX_S" --layout "$LAYOUT" --language "$LANG_CODE" --model "$MODEL" --out output)
+          [ -n "$SECTION" ] && args+=(--section "$SECTION")
+          [ "$TITLE_OVERLAY" = "true" ] && args+=(--title-overlay)
+          python clipper/clip.py "$URL" "${args[@]}" $COOKIE_ARG
+          rm -rf output/_work
+          cat output/clips.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clips-${{ github.run_number }}
+          path: output/
+          retention-days: 14
