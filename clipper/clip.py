@@ -106,7 +106,7 @@ def acquire(src: str, work: Path, section: str | None, cookies: str | None) -> t
            "-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
            "--merge-output-format", "mp4",
            "-o", str(work / "source.%(ext)s"),
-           "--write-info-json", "--print", "after_move:filepath"]
+           "--write-info-json"]
     if section:
         a, b = section.split("-", 1)
         cmd += ["--download-sections", f"*{a.strip()}-{b.strip()}", "--force-keyframes-at-cuts"]
@@ -114,7 +114,7 @@ def acquire(src: str, work: Path, section: str | None, cookies: str | None) -> t
         cmd += ["--cookies", cookies]
     cmd.append(src)
     res = subprocess.run(cmd, capture_output=True, text=True)
-    lines = [l for l in res.stdout.strip().splitlines() if l.strip() and Path(l.strip()).exists()]
+    lines: list[str] = []
     vids = [f for f in work.glob("source*") if f.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov")]
     if lines:
         path = Path(lines[-1].strip())
