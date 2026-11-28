@@ -106,7 +106,7 @@ def acquire(src: str, work: Path, section: str | None, cookies: str | None) -> t
            "-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
            "--merge-output-format", "mp4",
            "-o", str(work / "source.%(ext)s"),
-           "--write-info-json"]
+           "--write-info-json", "-o", "pl_infojson:" + str(work / "_playlist.%(ext)s")]
     if section:
         a, b = section.split("-", 1)
         cmd += ["--download-sections", f"*{a.strip()}-{b.strip()}", "--force-keyframes-at-cuts"]
@@ -253,17 +253,16 @@ def shape_window(c: Candidate, z: np.ndarray, min_len: float, max_len: float, du
         return
     # start: a word that begins a sentence (or follows a pause) near peak-lead
     target = c.peak - lead
-    starts = [0] + [i for i in range(1, len(ws))
-                    if SENT_END.search(ws[i - 1].text) or ws[i].start - ws[i - 1].end > 0.6]
+    sent_starts = [0] + [i for i in range(1, len(ws)) if SENT_END.search(ws[i - 1].text)]
+    pause_starts = [i for i in range(1, len(ws)) if ws[i].start - ws[i - 1].end > 0.6]
+    ok = [i for i in sent_starts if c.peak - max_len * 0.8 <= ws[i].start <= c.peak - 3]
+    starts = ok or [i for i in sorted(set(sent_starts + pause_starts)) if ws[i].start <= c.peak - 3] or [0]
     si = min(starts, key=lambda i: abs(ws[i].start - target))
-    if ws[si].start > c.peak - 3:  # never start after the moment itself
-        earlier = [i for i in starts if ws[i].start <= c.peak - 3]
-        si = earlier[-1] if earlier else 0
     c.start = max(0.0, ws[si].start - 0.25)
     # end: first sentence end after the peak that gives at least min_len, at most max_len
-    ends = [i for i in range(si, len(ws))
-            if SENT_END.search(ws[i].text) or i == len(ws) - 1
-            or (i + 1 < len(ws) and ws[i + 1].start - ws[i].end > 0.7)]
+    sent_ends = [i for i in range(si, len(ws)) if SENT_END.search(ws[i].text)]
+    pause_ends = [i for i in range(si, len(ws)) if i + 1 < len(ws) and ws[i + 1].start - ws[i].end > 0.7]
+    ends = sorted(set(sent_ends + [len(ws) - 1])) if sent_ends else sorted(set(pause_ends + [len(ws) - 1]))
     ei = None
     for i in ends:
         length = ws[i].end - c.start
