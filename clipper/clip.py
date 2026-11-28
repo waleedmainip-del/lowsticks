@@ -102,7 +102,7 @@ def acquire(src: str, work: Path, section: str | None, cookies: str | None) -> t
         return p.resolve(), {"title": p.stem, "uploader": "", "url": str(p)}
 
     log(f"downloading {src}")
-    cmd = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--no-progress",
+    cmd = [sys.executable, "-m", "yt_dlp", "--playlist-items", "1", "--no-progress",
            "-f", "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
            "--merge-output-format", "mp4",
            "-o", str(work / "source.%(ext)s"),
