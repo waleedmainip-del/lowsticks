@@ -113,9 +113,20 @@ def acquire(src: str, work: Path, section: str | None, cookies: str | None) -> t
     if cookies:
         cmd += ["--cookies", cookies]
     cmd.append(src)
-    res = run(cmd)
-    lines = [l for l in res.stdout.strip().splitlines() if l.strip()]
-    path = Path(lines[-1]) if lines else next(work.glob("source.*"))
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    lines = [l for l in res.stdout.strip().splitlines() if l.strip() and Path(l.strip()).exists()]
+    vids = [f for f in work.glob("source*") if f.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov")]
+    if lines:
+        path = Path(lines[-1].strip())
+    elif vids:
+        path = vids[0]
+    else:
+        err = (res.stderr or res.stdout or "").strip()[-1500:]
+        hint = ""
+        if "Sign in to confirm" in err or "bot" in err.lower():
+            hint = ("\nYouTube blocked this server. Use a Twitch/Kick/direct link, or add your YouTube "
+                    "cookies (see clipper/README.md).")
+        raise SystemExit(f"download failed:\n{err}{hint}")
     info = {"title": "", "uploader": "", "url": src}
     info_file = next(work.glob("source*.info.json"), None)
     if info_file:
